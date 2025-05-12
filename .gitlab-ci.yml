@@ -1,0 +1,11 @@
+stages:
+  - check
+
+check:
+  image: 'golang:1.23.0'
+  stage: check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - go build ./...
+    - go test
