@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Derive a new master key from a secret
-	master, err := hd.NewMasterKey(`7265706C696372`)
+	master, err := hd.NewMasterKey(`747261636B6572706C61747A`)
 	if err != nil {
 		panic(err)
 	}

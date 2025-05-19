@@ -50,8 +50,8 @@ func utf8ToBytes(str string) []uint8 {
 	return []uint8(str)
 }
 
-// StrToBytes converts a string (UTF-8 or Hex) to a uint8 slice.
-func StrToBytes(str string) ([]uint8, error) {
+// strToBytes converts a string (UTF-8 or Hex) to a uint8 slice.
+func strToBytes(str string) ([]uint8, error) {
 	// Check if the string is hex encoded
 	if isHex(str) {
 		// Convert hex string to bytes
@@ -61,13 +61,26 @@ func StrToBytes(str string) ([]uint8, error) {
 	return utf8ToBytes(str), nil
 }
 
+// intToBytes encodes an integer number as a 4 byte uint8 slice
+func intToBytes(num int) []uint8 {
+	return []uint8{
+		uint8(num >> 24),
+		uint8(num >> 16),
+		uint8(num >> 8),
+		uint8(num),
+	}
+}
+
 // ToBytes returns a uint8 slice from an input.
-// When the input is string, it is handled as either hex
-// encoded or UTF-8 encoded.
-func ToBytes(input interface{}) ([]uint8, error) {
+//
+// Supports string, int, and byte input. When the input is a
+// string, it is handled as either hex or UTF-8 encoded.
+func ToBytes(input any) ([]uint8, error) {
 	switch v := input.(type) {
 	case string:
-		return StrToBytes(v) // Convert to bytes when a string
+		return strToBytes(v) // Convert to bytes when a string
+	case int:
+		return intToBytes(v), nil // Convert to bytes when an integer
 	case []uint8:
 		return v, nil // Return the input when already a uint8 slice
 	default:
@@ -77,15 +90,15 @@ func ToBytes(input interface{}) ([]uint8, error) {
 
 // CalcSalt calculates a domain-separated salt for a secret.
 func CalcSalt(secret []uint8) ([]uint8, error) {
-	label, err := StrToBytes(`symmetric_hd/salt`) // Domain-separated label
-	if err != nil {                               // Check if 'StrToBytes' encountered an error
-		return nil, err // Return error
+	label, err := strToBytes(`symmetric_hd/salt`) // Domain-separated label
+	if err != nil {
+		return nil, err
 	}
-	mac, err := blake2b.New(16, label) // 16 byte blake2b MAC
-	if err != nil {                    // Check if 'blake2b.New' encountered an error
-		return nil, err // Return error
+	mac, err := blake2b.New(16, label) // Create a 16 byte blake2b MAC
+	if err != nil {
+		return nil, err
 	}
-	mac.Write(secret)                          // Create MAC of 'secret'
+	mac.Write(secret)                          // Write 'secret' to the MAC
 	return append(label, mac.Sum(nil)...), nil // Return bytes of 'label' + 'mac'
 }
 
@@ -105,63 +118,53 @@ func isValidIndex(i int) bool {
 func GetIndex(index string, typ string) (int, error) {
 	var i int
 	switch typ {
-	case "num": // Check if the type is 'num'
-		if !isNumber(index) { // If 'index' is an invalid numeric string
-			return 0, fmt.Errorf(`invalid number index, "%s"`, index)
+	case "num":
+		if !isNumber(index) {
+			return 0, fmt.Errorf(`invalid number index, %q`, index)
 		}
 		i, _ = strconv.Atoi(index) // Convert string number to an integer
-	case "str": // Check if the type is 'str'
-		if !isString(index) { // If 'index' is an invalid alphabetic string
-			return 0, fmt.Errorf(`invalid string index, "%s"`, index) // Return an error
+	case "str":
+		if !isString(index) {
+			return 0, fmt.Errorf(`invalid string index, %q`, index)
 		}
 		i = StrToIndex(index) // Convert alphabetic string to an index integer
-	case "any": // Check if the type is 'any'
-		if isNumber(index) { // First, check if the index is a numeric string
+	case "any":
+		if isNumber(index) {
 			i, _ = strconv.Atoi(index) // Convert to integer
-		} else if isString(index) { // Second, check if the index is an alphabetic string
+		} else if isString(index) {
 			i = StrToIndex(index) // Convert to numeric index
-		} else { // If both 'num' and 'str' conditions failed
-			return 0, fmt.Errorf(`invalid index, "%s"`, index) // Return an error
+		} else {
+			return 0, fmt.Errorf(`invalid index, %q`, index)
 		}
 	default:
-		return 0, fmt.Errorf(`invalid type, "%s"`, typ) // Return an error if the type is invalid
+		return 0, fmt.Errorf(`invalid type, %q`, typ)
 	}
 	if isValidIndex(i) {
 		return i, nil // Return if the index 'i' is in range
 	} else {
-		return 0, fmt.Errorf(`out of range index, "%d"`, i) // Return an error when the index is out of range
-	}
-}
-
-// EncodeIndex encodes an integer index number as a 4 byte uint8 slice.
-func EncodeIndex(i int) []uint8 {
-	return []uint8{
-		uint8(i >> 24),
-		uint8(i >> 16),
-		uint8(i >> 8),
-		uint8(i),
+		return 0, fmt.Errorf(`out of range index, %q`, i)
 	}
 }
 
 // Fingerprint calculates a fingerprint from a parent key and child key.
 func Fingerprint(parent []uint8, child []uint8) ([]uint8, error) {
 	salt, err := CalcSalt(parent) // Derive a deterministic 'salt' from the parent key
-	if err != nil {               // Check if 'CalcSalt' encountered an error
-		return nil, err // Return error
+	if err != nil {
+		return nil, err
 	}
-	info, err := StrToBytes(`symmetric_hd/fingerprint`) // Use domain-separated label as the 'info'
-	if err != nil {                                     // Check if 'StrToBytes' encountered an error
-		return nil, err // Return error
+	info, err := strToBytes(`symmetric_hd/fingerprint`) // Use domain-separated label as the 'info'
+	if err != nil {
+		return nil, err
 	}
-	key, err := hkdf.Hkdf(parent, salt, info, 32) // Blake2b-HKDF key from an IKM of 'parent'
-	if err != nil {                               // Check if 'hkdf.Hkdf' encountered an error
-		return nil, err // Return error
+	key, err := hkdf.New(parent, salt, info, 32) // Blake2b-HKDF key from an IKM of 'parent'
+	if err != nil {
+		return nil, err
 	}
-	mac, err := blake2b.New(16, key) // 16 byte blake2b MAC
-	if err != nil {                  // Check if 'blake2b.New' encountered an error
-		return nil, err // Return error
+	mac, err := blake2b.New(16, key) // Create a 16 byte blake2b MAC
+	if err != nil {
+		return nil, err
 	}
-	mac.Write(child)         // Create a MAC of 'child'
+	mac.Write(child)         // Write 'child' to the MAC
 	return mac.Sum(nil), nil // Return MAC as fingerprint
 }
 
@@ -169,8 +172,8 @@ func Fingerprint(parent []uint8, child []uint8) ([]uint8, error) {
 func VerifyFp(child HDKey, parent HDKey) (bool, error) {
 	fp1 := child.Fingerprint                       // Extract the child fingerprint as 'fp1'
 	fp2, err := Fingerprint(parent.Key, child.Key) // Derive 'fp2' from the parent and child keys
-	if err != nil {                                // Check if 'Fingerprint' encountered an error
-		return false, err // Return error
+	if err != nil {
+		return false, err
 	}
 	if len(fp1) != 16 || len(fp2) != 16 {
 		return false, nil // Return false if the fingerprints are not 16 bytes each
@@ -187,7 +190,7 @@ func VerifyFp(child HDKey, parent HDKey) (bool, error) {
 func SplitIkm(bytes []uint8, sizes []int) [][]uint8 {
 	result := make([][]uint8, 0, len(sizes)) // Allocate result slice for the split ikm
 	offset := 0                              // Start at index 0 in 'bytes'
-	for _, length := range sizes {           // Iterate over the byte lengths in 'size'
+	for _, length := range sizes {
 		seg := make([]uint8, length)           // Create a new slice for the segment
 		copy(seg, bytes[offset:offset+length]) // Copy the segment into the new slice
 		result = append(result, seg)           // Add the segment to 'result'
