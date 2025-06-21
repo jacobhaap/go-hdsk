@@ -1,101 +1,96 @@
-# Go | Symmetric HD
-Symmetric HD is an implementation of Hierarchical Deterministic (HD) keys in a symmetric context. Blake2b and an HKDF-Blake2b implementation are utilized as the cryptographic primitives.
+# Go HDSK
+Go HDSK is an implementation of Hierarchical Deterministic Symmetric Keys, a method of symmetric key generation using schema-driven derivation paths for generating nodes in hierarchies descending from master keys.
 
-## HDKey Type
-All keys derived by this library are of the `HDKey` type, a struct that holds the 32 byte symmetric key, the chain code, and metadata including the depth in the hierarchy, derivation path, and the key's fingerprint.
+This is a reference implementation of the specification titled *["Hierarchical Deterministic Symmetric Keys"](https://gist.github.com/jacobhaap/d75c96f61bcc32154498842e620a3261)*.
+
+## Types
+Parsed derivation path schemas are of the `HDPath` type, and parsed derivation paths are of the `HDSchema` type. All keys derived by this library are of the `HDKey` type, a struct that holds the 32 byte cryptographic key, 32 byte chain code, an integer representing the hierarchical depth, and a 16 byte fingerprint.
 ```go
+type HDPath []int
+
+type HDSchema [][2]string
+
 type HDKey struct {
-	Key         []uint8 // Key
-	Code        []uint8 // Chain code
-	Depth       int     // Depth in hierarchy
-	Path        string  // Derivation path
-	Fingerprint []uint8 // Fingerprint
+	Key         []byte
+	Code        []byte
+	Depth       int
+	Fingerprint []byte
 }
 ```
 
-# Derivation Paths
-When deriving an HD key in a nested hierarchy, a derivation path is required. All derivation paths are required to follow a schema, which may defined using the `NewPathSchema` function. The function expects a ***schema*** parameter as a *string*, and returns a `PathSchema` *struct* holding the parsed schema. Schemas assign labels to indices of a derivation path, as a method to assign a purpose or context. Labels are typed, as either a string `str`, integer `num`, or `any` for either of the two. A derivation path schema must always begin with `m` to designate the master key. Schemas are divided into segments, with each segment containing a label and type as `label: type`, and not exceeding 256 segments in the schema (including the master key segment).
+## Derivation Paths
+When generating a node in a hierarchy descending from a master key, a derivation path is required. The expected length and expected types for child key indices of a derivation path is enforced by a derivation path schema.
 
-*Default schema:*
-```
-m / application: any / purpose: any / context: any / index: num
-```
-A derivation path is parsed using a schema to enforce type and validity, parsed using the `Parse` function held in a **PathSchema** *struct* that contains a parsed schema. The function expects a ***path*** parameter as a string, and returns a *slice* of integers (*[]int*). The number of indices may not exceed the number of segments from the schema, and each index must fall in the range **0** to **2³¹-1**. When an index is provided as a string, during parsing it converts to a 32 bit integer.
+### Schemas
+Schemas are strings that contain a series of segments to define the expected pattern of a derivation path. Each segment of a schema contains a label and a type for labeling of indices. Permitted types are ***str*** for string, ***num*** for integer, and ***any*** for either. A schema can be parsed from a string using the `hdsk.Schema` function, returning the parsed schema as an *HDSchema*.
 
-*Default derivation path:*
-```
-m/42/0/1/0
-```
+### Paths
+Derivation paths are strings that define a hierarchical sequence of child key indices, descending from a master key. Each segment in the path corresponds to a level in the hierarchy, and its value may be an integer or a string. A derivation path can be parsed from a string using the `hdsk.Path` function, returning the parsed derivation path as an *HDPath*. A hash function and a schema are required to parse a derivation path.
 
-# Key Derivation
-Derivation of HD keys always begins from the derivation of a master key from a secret. From a master key, a child key may be derived at a selected in-range index. Child keys may also be derived from other child keys. Child key derivation always derives a key at a depth of 1 deeper in the hierarchy than the parent node. For derivation in a nested hierarchy, a master or child key combined with a derivation path derives a child key at a node in the hierarchy corresponding to the indices contained in the path.
+## Generating Keys
+For the generation of HD keys, keys can exist as either a master key or a child key. Master keys are derived from a given secret, and child keys are derived from a master key from a given index, or a parsed derivation path for deriving specific nodes in a hierarchy.
 
-## Master Keys
-Master keys are derived from a ***secret*** using the `NewMasterKey` function. The ***secret*** parameter is expected as either a UTF-8 or hex-encoded *string*, or a *Uint8Array*. The *NewMasterKey* function returns a *struct* holding the derived master key.
+### Master & Child Keys
+Master keys are derived from a secret using the `hdsk.Master` function, returning the derived master key as an *HDKey*. A hash function and a secret (byte slice) are required to derive a master key. Child keys are derived from a master key and an index using the `hdsk.Child` function, returning the derived child key as an *HDKey*. A hash function, pointer to a master key, and integer index are required to derive a child key.
 
-## Child Keys
-Child keys are derived with the `NewChildKey` function, with an HD key provided as the ***parent*** parameter, or with the `DeriveChild` function held in a *struct* that contains an HD key. Both functions expect an ***index*** parameter as either a UTF-8 or hex-encoded *string*, or a *Uint8Array*. Both functions return a *struct* holding the derived child key.
+### Nodes in a Hierarchy
+Keys at specific nodes in a hierarchy descending from a master key are derived from a master key and derivation path using the `hdsk.Node` function. The master key's chain code as the secret to initialize the first key in the sequence of child key indices, with subsequent keys are derived from their corresponding index and the chain code of the previous key in the hierarchy, repeating until the target node is derived. The derived node is returned as an *HDKey*. A hash function, pointer to a master key, and HDPath are required to derive a node.
 
-## Path-Based Key Derivation
-Hierarchical deterministic keys in a nested hierarchy defined by a derivation path can be derived from a ***key*** and a ***path***, using the `DeriveHdKey` function. The ***key*** is expected as a *struct* containing an **HDKey**, and the ***path*** is expected as a parsed derivation path. The *DeriveHdKey* function returns a new child key.
+### Key Lineage
+The lineage of a child key's direct descent from a master key (the child key was directly derived from the master key) can be verified using the `hdsk.Lineage` function, returning a *bool* result of the lineage verification. This verifies that a key is the direct child of a master key, using the key's fingerprint. While master keys contain their own fingerprints, the lineage of master keys cannot be verified as they lack parent keys. A hash function, and pointers to child and master keys are required to verify key lineage.
 
-## Lineage Verification
-All keys, including master keys, include a fingerprint that acts as a unique identifier for the key, and can be used to verify that a key is derived from a given secret, or that it is the direct child of a parent key. The verification of key lineage is completed using the `Lineage` function held by a *struct* that contains an HD key. This function expects a ***parent*** parameter as an *HDKey*, and returns a *bool* result of the lineage verification.
-
-## Example
+# Example Use
 ```go
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 
-	hd "github.com/jacobhaap/go-symmetric-hd"
+	"github.com/jacobhaap/go-hdsk"
 )
 
 func main() {
-	// Define a new derivation path schema with
-	str := `m / application: any / purpose: any / context: any / index: num`
-	schema, err := hd.NewPathSchema(str)
+	// Use sha256 hash function
+	h := sha256.New
+	// Parse a new derivation path schema
+	schema, err := hdsk.Schema("m / application: any / purpose: any / context: any / index: num")
 	if err != nil {
 		panic(err)
 	}
-
-	// Parse/validate a derivation path using the schema
-	path, err := schema.Parse(`m/42/0/1/0`)
+	// Parse a new derivation path
+	path, err := hdsk.Path(h, "m/42/0/1/0", schema)
 	if err != nil {
 		panic(err)
 	}
-
-	// Derive a new master key from a secret
-	master, err := hd.NewMasterKey(`747261636B6572706C61747A`)
+	// Derive a new master key
+	secret := make([]byte, 32)
+	master, err := hdsk.Master(h, secret)
 	if err != nil {
 		panic(err)
 	}
-
-	// Derive a new child key from the master key
-	child, err := master.DeriveChild(42)
+	// Derive a new child key
+	child, err := hdsk.Child(h, &master, 42)
 	if err != nil {
 		panic(err)
 	}
-
-	// Verify the lineage of the child key
-	lineage, err := child.Lineage(master.Key)
+	// Derive a new node in a hierarchy
+	node, err := hdsk.Node(h, &master, path)
 	if err != nil {
 		panic(err)
 	}
-
-	// Derive a key in a nested hierarchy using a derivation path
-	key, err := hd.DeriveHdKey(master, path)
+	// Verify lineage of the child key
+	lineage, err := hdsk.Lineage(h, &child, &master)
 	if err != nil {
 		panic(err)
 	}
 
 	// Display schema, path, keys, and lineage
-	fmt.Println(`Path Schema:`, schema.Schema)
+	fmt.Println(`Derivation Path Schema:`, schema)
 	fmt.Println(`Derivation Path:`, path)
-	fmt.Println(`Master Key:`, master)
-	fmt.Println(`Child Key:`, child)
-	fmt.Println(`Lineage:`, lineage)
-	fmt.Println(`HD Key:`, key)
+	fmt.Println(`Master Key:`, master.Key)
+	fmt.Println(`Child Key:`, child.Key)
+	fmt.Println(`Node in a Hierarchy:`, node.Key)
+	fmt.Println(`Child derived from Master:`, lineage)
 }
 ```
