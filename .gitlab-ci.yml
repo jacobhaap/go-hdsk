@@ -1,11 +1,24 @@
 stages:
-  - check
+  - lint
+  - build
 
-check:
-  image: 'golang:1.23.0'
-  stage: check
+lint:
+  image: golangci/golangci-lint:latest
+  stage: lint
+  rules:
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    exists:
+    - "**/*.go"
+  script:
+    - golangci-lint run
+
+build:
+  image: golang:1.24.4
+  stage: build
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      exists:
+      - "**/*.go"
   script:
     - go build ./...
     - go test

@@ -1,0 +1,47 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - errcheck
+    - goconst
+    - gocritic
+    - gocyclo
+    - gosec
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - wrapcheck
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+      numbers: true
+      ignore-calls: false
+      find-duplicates: true
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-tags:
+        - experimental
+        - opinionated
+    gocyclo:
+      min-complexity: 10
+    govet:
+      enable:
+        - appends
+        - assign
+        - bools
+        - printf
+        - stdmethods
+        - stringintconv
+        - unreachable
+        - unusedresult
+    unused:
+      parameters-are-used: false
+      local-variables-are-used: false
