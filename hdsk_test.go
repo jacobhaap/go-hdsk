@@ -85,9 +85,8 @@ var vectors = []vector{
 
 // TestHdsk is a test for the hdsk package.
 func TestHdsk(t *testing.T) {
-	h := sha256.New // Use sha256 as the hash function
-	str := "m / application: any / purpose: any / context: any / index: num"
-	schema, err := hdsk.Schema(str) // Parse the schema
+	h := sha256.New                                // Use sha256 as the hash function
+	schema, err := hdsk.Schema(hdsk.DefaultSchema) // Parse the default schema
 	if err != nil {
 		t.Fatal(err)
 	}

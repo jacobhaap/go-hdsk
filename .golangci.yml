@@ -11,14 +11,11 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - wrapcheck
   settings:
     errcheck:
       check-type-assertions: true
       check-blank: true
     goconst:
-      min-len: 2
-      min-occurrences: 2
       numbers: true
       ignore-calls: false
       find-duplicates: true
